@@ -2,8 +2,8 @@
 
 set -o errexit
 
-# Buildah script to create Fedora 33 Build Environment
-# with MXE for iuse with Aleph One.
+# Buildah script to create Ubuntu 18.04 Build Environment
+# with MXE for use with Aleph One.
 #
 # (C) 2021 Marathon Speedrun Developers
 #
@@ -37,7 +37,8 @@ set -o errexit
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-ctr=$(buildah from fedora:33)
+ctr=$(buildah from ubuntu:20.04)
+mount_ctr=$(buildah mount $ctr)
 
 # Metadata
 
@@ -45,30 +46,37 @@ buildah config --author="Marathon Speedrun Developers <marathonspeedruns@gmail.c
 
 # Install Build Dependencies
 
-buildah run $ctr dnf update -y
+buildah run $ctr apt-get -y update
 
-buildah run $ctr dnf install -y @Development\ Tools
+buildah run $ctr apt-get -y upgrade
 
-buildah run $ctr dnf install -y \
-	https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-33.noarch.rpm \
-	https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-33.noarch.rpm
+buildah run $ctr apt-get -y install build-essential
 
-buildah run $ctr dnf install -y autoconf automake bash bison bzip2 \
-	flex gcc-c++ gdk-pixbuf2-devel gettext \
-	git gperf intltool libtool lzip make \
-	openssl-devel p7zip patch perl python \
-	ruby sed unzip wget xz
+buildah run $ctr apt-get -y install autoconf automake autopoint bash bison \
+	bzip2 flex g++ g++-multilib gettext git \
+	gperf intltool libc6-dev-i386 libgdk-pixbuf2.0-dev \
+	libltdl-dev libssl-dev libtool-bin libxml-parser-perl \
+	lzip make openssl p7zip-full patch perl \
+	python ruby sed unzip wget xz-utils
 
 # Grabbing MXE
 
 buildah config --workingdir /opt $ctr
 buildah run $ctr git clone --depth 1 https://github.com/Aleph-One-Marathon/mxe.git
 buildah config --workingdir /opt/mxe $ctr
+buildah run $ctr make -j`nproc` boost curl expat ffmpeg freetype glew jpeg libpng \
+	sdl2 sdl2_image sdl2_mixer sdl2_net sdl2_ttf speex speexdsp zziplib
 
-# Pray to your God.
+# Creating Clean Container
 
-buildah run $ctr make -j`nproc` MXE_TARGETS='i686-w64-mingw32.static x86_64-w64-mingw32.static'
+ctr2=$(buildah from ubuntu:20.04)
+mount_ctr2=$(buildah mount $ctr2)
+
+buildah run $ctr2 apt -y update
+buildah run $ctr2 apt -y upgrade
+
+mv $mount_ctr/opt/mxe $mount_ctr2/opt/mxe
 
 # Commit Changes
 
-buildah commit --format docker $ctr marathondevs/alephone-fc33-mxe
+buildah commit --format docker $ctr2 marathondevs/alephone-mxe
